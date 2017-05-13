@@ -1,5 +1,6 @@
 #import "CDVLeanPlum.h"
 #import <LeanPlum/LeanPlum.h>
+#import <objc/message.h>
 
 @implementation CDVLeanPlum
 
@@ -128,8 +129,6 @@
 
 - (void)notificationReceived
 {
-    NSLog(@"Notification received");
-
     if (self.notificationMessage && self.callback)
     {
         NSMutableString *jsonStr = [NSMutableString stringWithString:@"{"];
@@ -138,14 +137,27 @@
 
         [jsonStr appendString:@"}"];
 
-        NSLog(@"Msg: %@", jsonStr);
-
         NSString * jsCallBack = [NSString stringWithFormat:@"%@(%@);", self.callback, jsonStr];
-        [self.webView stringByEvaluatingJavaScriptFromString:jsCallBack];
+
+        SEL stringByEvaluatingJavaScriptFromStringSEL = @selector(stringByEvaluatingJavaScriptFromString:);
+        SEL webViewEngineSEL = @selector(webViewEngine);
+        SEL evaluateJavaScriptCompletionHandlerSEL = @selector(evaluateJavaScript:completionHandler:);
+
+        if ([self respondsToSelector:webViewEngineSEL]) {
+            // Use the new CDVWebViewEngineProtocol protocol introduced in Cordova 4.0.
+            // See for more details: https://github.com/apache/cordova-ios/blob/master/guides/API%20changes%20in%204.0.md
+            // Use objc_msgSend to silence 'undeclared selector' warning.
+            id webViewEngine = objc_msgSend(self, webViewEngineSEL);
+
+            if ([webViewEngine respondsToSelector:evaluateJavaScriptCompletionHandlerSEL]) {
+                objc_msgSend(webViewEngine, evaluateJavaScriptCompletionHandlerSEL, jsCallBack, nil);
+            }
+        } else if ([self.webView respondsToSelector:stringByEvaluatingJavaScriptFromStringSEL]) {
+            objc_msgSend(self.webView, stringByEvaluatingJavaScriptFromStringSEL, jsCallBack);
+        }
 
         self.notificationMessage = nil;
     }
-
 }
 
 -(void)parseDictionary:(NSDictionary *)inDictionary intoJSON:(NSMutableString *)jsonString
